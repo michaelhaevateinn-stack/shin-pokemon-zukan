@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#183843"><title>みはっけんポケモン図鑑</title><meta name="description" content="ゲボラと見つけた新種を、自分だけの図鑑へ。"><link rel="stylesheet" href="style.css?v=family1"><script defer src="app.js?v=family1"></script><script type="module" src="./cloud.js?v=family1"></script></head>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#183843"><title>みはっけんポケモン図鑑</title><meta name="description" content="ゲボラと見つけた新種を、自分だけの図鑑へ。"><link rel="stylesheet" href="style.css?v=family2"><script defer src="app.js?v=family2"></script><script type="module" src="./cloud.js?v=family2"></script></head>
 <body>
 <header class="top"><div class="wrap top-line"><a href="#top" class="brand">✦ みはっけん研究所</a><nav aria-label="ページ内の案内"><a href="#discover">つくる</a><a href="#dex">図鑑</a></nav></div></header>
 <main id="top">
@@ -28,7 +28,7 @@
 <div class="actions"><button class="button secondary" type="button" id="cloudSignIn" hidden>Googleでログイン</button><button class="button secondary" type="button" id="cloudSignOut" hidden>ログアウト</button></div>
 <div class="actions" id="cloudViews" hidden><button class="button secondary" type="button" id="localView" aria-pressed="true">この端末</button><button class="button secondary" type="button" id="sharedView" aria-pressed="false">家族の図鑑</button><button class="button secondary" type="button" id="cloudCopy" disabled>この端末の図鑑を共有にコピー</button></div>
 <div class="cloud-confirm" id="cloudCopyConfirm" hidden><p id="cloudCopyQuestion"></p><div class="actions"><button class="button primary" type="button" id="cloudCopyYes">共有にコピーする</button><button class="button secondary" type="button" id="cloudCopyNo">やめる</button></div></div>
-<p id="cloudActionStatus" class="status" role="status"></p>
+<details id="cloudDiagnostics" hidden><summary>許可の確認</summary><p id="cloudReason"></p><label for="cloudUid">いまログイン中のユーザーUID</label><input id="cloudUid" type="text" readonly autocomplete="off" spellcheck="false"></details><p id="cloudActionStatus" class="status" role="status"></p>
 </section><div id="entryList"></div>
 <details class="backup"><summary>図鑑のバックアップ</summary><p class="hint">図鑑はこのブラウザに保存されるよ。別の端末に移すときや、データを消す前にバックアップしてね。</p><div class="actions"><button class="button secondary" type="button" id="exportEntries">バックアップを書き出す</button><label class="button secondary file-label">読み込む<input id="importEntries" type="file" accept=".json,application/json"></label></div><p id="backupStatus" class="status" role="status"></p></details></section>
 </div></main><footer class="wrap">みはっけん研究所 · 非公式のファン図鑑</footer></body></html>

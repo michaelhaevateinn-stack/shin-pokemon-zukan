@@ -6,8 +6,8 @@ const TYPES=new Set(['ノーマル','ほのお','みず','でんき','くさ','�
 const ID=/^[a-z0-9.-]{1,75}$/i;
 const observers=new Set();
 let current={state:'unconfigured'}, auth, db, sdkAuth, sdkDb, provider, uid=null, generation=0;
-function announce(state,email=null){
- current=Object.freeze({state,email}); for(const observer of observers){try{observer(current)}catch{}}
+function announce(state,email=null,reason=null){
+ current=Object.freeze({state,email,reason}); for(const observer of observers){try{observer(current)}catch{}}
 }
 function token(){
  const who=auth?.currentUser;
@@ -16,7 +16,7 @@ function token(){
  const check=()=>{if(tick!==generation||current.state!=='ready'||uid!==key||auth?.currentUser?.uid!==key)throw Error('Family session changed');};
  check.fail=error=>{
   if(error?.code==='permission-denied'&&tick===generation&&uid===key&&auth?.currentUser?.uid===key){
-   generation++;uid=null;announce('unauthorized');
+   generation++;uid=null;announce('unauthorized',null,'access-denied');
   }
   throw error;
  };
@@ -63,17 +63,19 @@ async function observe(user){
  try{
   const info=await sdkAuth.getIdTokenResult(user);
   if(seq!==generation||auth.currentUser?.uid!==user.uid)return;
-  if(info.signInProvider!=='google.com'||info.claims.email_verified!==true){announce('unauthorized');return}
+  if(info.signInProvider!=='google.com'||info.claims.email_verified!==true){announce('unauthorized',null,'google-unverified');return}
   const member=await sdkDb.getDocFromServer(sdkDb.doc(db,'familyDexMembers',user.uid));
   if(seq!==generation||auth.currentUser?.uid!==user.uid)return;
-  if(!member.exists()||member.data().enabled!==true){announce('unauthorized');return}
+  if(!member.exists()){announce('unauthorized',null,'member-missing');return}
+  if(member.data().enabled!==true){announce('unauthorized',null,'member-disabled');return}
   uid=user.uid;announce('ready',user.email||null);
  }catch(error){
   if(seq!==generation)return;
-  announce(error?.code==='permission-denied'?'unauthorized':'error');
+  announce(error?.code==='permission-denied'?'unauthorized':'error',null,error?.code==='permission-denied'?'rules-denied':null);
  }
 }
 const cloud={
+ diagnosticsUid(){return current.state==='unauthorized' ? auth?.currentUser?.uid??'' : ''},
  subscribe(fn){observers.add(fn);fn(current);return ()=>observers.delete(fn)},
  async signIn(){
   if(!auth)throw Error('Not configured');
