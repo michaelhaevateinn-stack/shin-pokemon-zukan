@@ -1,5 +1,6 @@
 import {firebaseConfig} from './firebase-config.js';
 
+const FIREBASE_SDK='https://www.gstatic.com/firebasejs/11.10.0/';
 const LIMIT=150, IMAGE_LIMIT=850*1024;
 const MIME=new Set(['image/webp','image/png','image/jpeg']);
 const TYPES=new Set(['ノーマル','ほのお','みず','でんき','くさ','こおり','かくとう','どく','じめん','ひこう','エスパー','むし','いわ','ゴースト','ドラゴン','あく','はがね','フェアリー']);
@@ -66,8 +67,17 @@ async function observe(user){
   if(info.signInProvider!=='google.com'||info.claims.email_verified!==true){announce('unauthorized',null,'google-unverified');return}
   const member=await sdkDb.getDocFromServer(sdkDb.doc(db,'familyDexMembers',user.uid));
   if(seq!==generation||auth.currentUser?.uid!==user.uid)return;
-  if(!member.exists()){announce('unauthorized',null,'member-missing');return}
-  if(member.data().enabled!==true){announce('unauthorized',null,'member-disabled');return}
+  let membership=member.exists()?member.data():null;
+  if(!membership){
+   // Cross-check a missing result with the official SDK's direct server read.
+   // Same Firebase app, signed-in account, database, document and security rules.
+   const lite=await import(FIREBASE_SDK+'firebase-firestore-lite.js');
+   const exact=await lite.getDoc(lite.doc(lite.getFirestore(auth.app),'familyDexMembers',user.uid));
+   if(seq!==generation||auth.currentUser?.uid!==user.uid)return;
+   if(!exact.exists()){announce('unauthorized',null,'member-missing');return}
+   membership=exact.data();
+  }
+  if(membership?.enabled!==true){announce('unauthorized',null,'member-disabled');return}
   uid=user.uid;announce('ready',user.email||null);
  }catch(error){
   if(seq!==generation)return;
@@ -124,7 +134,7 @@ const cloud={
 window.dexCloud=Object.freeze(cloud);window.dispatchEvent(new Event('dexCloudReady'));
 if(firebaseConfig?.projectId&&firebaseConfig?.apiKey&&firebaseConfig?.authDomain&&firebaseConfig?.appId){
  announce('connecting');
- const base='https://www.gstatic.com/firebasejs/11.10.0/';
+ const base=FIREBASE_SDK;
  try{
   const [sdkApp,a,f]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-auth.js'),import(base+'firebase-firestore.js')]);
   sdkAuth=a;sdkDb=f;
