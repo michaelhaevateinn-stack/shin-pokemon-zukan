@@ -65,19 +65,10 @@ async function observe(user){
   const info=await sdkAuth.getIdTokenResult(user);
   if(seq!==generation||auth.currentUser?.uid!==user.uid)return;
   if(info.signInProvider!=='google.com'||info.claims.email_verified!==true){announce('unauthorized',null,'google-unverified');return}
-  const member=await sdkDb.getDocFromServer(sdkDb.doc(db,'familyDexMembers',user.uid));
+  // A successful server query, even on an empty collection, proves current access.
+  const probe=sdkDb.query(sdkDb.collection(db,'familyDexEntries'),sdkDb.limit(1));
+  await sdkDb.getDocsFromServer(probe);
   if(seq!==generation||auth.currentUser?.uid!==user.uid)return;
-  let membership=member.exists()?member.data():null;
-  if(!membership){
-   // Cross-check a missing result with the official SDK's direct server read.
-   // Same Firebase app, signed-in account, database, document and security rules.
-   const lite=await import(FIREBASE_SDK+'firebase-firestore-lite.js');
-   const exact=await lite.getDoc(lite.doc(lite.getFirestore(auth.app),'familyDexMembers',user.uid));
-   if(seq!==generation||auth.currentUser?.uid!==user.uid)return;
-   if(!exact.exists()){announce('unauthorized',null,'member-missing');return}
-   membership=exact.data();
-  }
-  if(membership?.enabled!==true){announce('unauthorized',null,'member-disabled');return}
   uid=user.uid;announce('ready',user.email||null);
  }catch(error){
   if(seq!==generation)return;

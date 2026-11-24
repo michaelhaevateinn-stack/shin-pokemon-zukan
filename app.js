@@ -250,9 +250,7 @@
    ownUid.value=state==='unauthorized'?(cloud?.diagnosticsUid?.()||''):'';
    report('cloudReason',({
     'google-unverified':'確認コード A：Googleログインの確認情報がそろっていません。',
-    'member-missing':'確認コード B：このUIDの家族登録が見つかりません。',
-    'member-disabled':'確認コード C：家族登録の enabled が true になっていません。',
-    'rules-denied':'確認コード D：Firestoreが家族登録の読み取りを拒否しました。',
+    'rules-denied':'確認コード D：このGoogleアカウントは家族の共有図鑑に許可されていません。',
     'access-denied':'確認コード E：Firestoreが共有図鑑へのアクセスを拒否しました。'
    })[info?.reason]||'');
    if(state!=='unauthorized')diagnostic.open=false;
