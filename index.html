@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#183843"><title>みはっけんポケモン図鑑</title><meta name="description" content="ゲボラと見つけた新種を、自分だけの図鑑へ。"><link rel="stylesheet" href="style.css"><script defer src="app.js"></script></head>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#183843"><title>みはっけんポケモン図鑑</title><meta name="description" content="ゲボラと見つけた新種を、自分だけの図鑑へ。"><link rel="stylesheet" href="style.css?v=family1"><script defer src="app.js?v=family1"></script><script type="module" src="./cloud.js?v=family1"></script></head>
 <body>
 <header class="top"><div class="wrap top-line"><a href="#top" class="brand">✦ みはっけん研究所</a><nav aria-label="ページ内の案内"><a href="#discover">つくる</a><a href="#dex">図鑑</a></nav></div></header>
 <main id="top">
@@ -19,8 +19,16 @@
 <section id="register" class="section" aria-labelledby="register-title"><p class="eyebrow">きろくする</p><h2 id="register-title">新種を図鑑にのせる</h2><p>ゲボラが描いた絵を保存して、名前とタイプをつけよう。</p>
 <form id="entryForm" class="entry-box"><label for="entryImage">ポケモンの絵</label><input id="entryImage" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/heic,image/heif" required><img id="entryPreview" alt="登録する絵のプレビュー" hidden>
 <label for="entryName">名前</label><input id="entryName" type="text" maxlength="32" required placeholder="自分で名前をつけよう">
-<div class="types"><div><label for="entryType1">タイプ1</label><select id="entryType1" required></select></div><div><label for="entryType2">タイプ2（なくてもOK）</label><select id="entryType2"></select></div></div>
-<div class="actions"><button class="button primary" type="submit">図鑑に登録する</button><span id="entryStatus" class="status" role="status"></span></div></form></section>
-<section id="dex" class="section" aria-labelledby="dex-title"><p class="eyebrow">コレクション</p><div class="heading"><h2 id="dex-title">ぼくたちの図鑑</h2><span id="entryCount"></span></div><div id="entryList"></div>
+<div class="types"><div><label for="entryType1">タイプ1</label><select id="entryType1" required></select></div><div><label for="entryType2">タイプ2（なくてもOK）</label><select id="entryType2"></select></div><div><label for="entryType3">タイプ3（なくてもOK）</label><select id="entryType3"></select></div></div>
+<div class="actions"><button class="button primary" id="entrySubmit" type="submit">この端末の図鑑に登録する</button><span id="entryStatus" class="status" role="status"></span></div></form></section>
+<section id="dex" class="section" aria-labelledby="dex-title"><p class="eyebrow">コレクション</p><div class="heading"><h2 id="dex-title">ぼくたちの図鑑</h2><span id="entryCount"></span></div><section class="family-share" aria-labelledby="familyShareTitle">
+<h3 id="familyShareTitle">家族の共有図鑑</h3>
+<p class="hint">家族の許可されたアカウントだけが見られるよ。この端末の図鑑を共有にコピーしても、元の記録は消えないよ。</p>
+<p id="cloudStatus" class="status" role="status">この端末の図鑑を表示中。</p>
+<div class="actions"><button class="button secondary" type="button" id="cloudSignIn" hidden>Googleでログイン</button><button class="button secondary" type="button" id="cloudSignOut" hidden>ログアウト</button></div>
+<div class="actions" id="cloudViews" hidden><button class="button secondary" type="button" id="localView" aria-pressed="true">この端末</button><button class="button secondary" type="button" id="sharedView" aria-pressed="false">家族の図鑑</button><button class="button secondary" type="button" id="cloudCopy" disabled>この端末の図鑑を共有にコピー</button></div>
+<div class="cloud-confirm" id="cloudCopyConfirm" hidden><p id="cloudCopyQuestion"></p><div class="actions"><button class="button primary" type="button" id="cloudCopyYes">共有にコピーする</button><button class="button secondary" type="button" id="cloudCopyNo">やめる</button></div></div>
+<p id="cloudActionStatus" class="status" role="status"></p>
+</section><div id="entryList"></div>
 <details class="backup"><summary>図鑑のバックアップ</summary><p class="hint">図鑑はこのブラウザに保存されるよ。別の端末に移すときや、データを消す前にバックアップしてね。</p><div class="actions"><button class="button secondary" type="button" id="exportEntries">バックアップを書き出す</button><label class="button secondary file-label">読み込む<input id="importEntries" type="file" accept=".json,application/json"></label></div><p id="backupStatus" class="status" role="status"></p></details></section>
 </div></main><footer class="wrap">みはっけん研究所 · 非公式のファン図鑑</footer></body></html>
