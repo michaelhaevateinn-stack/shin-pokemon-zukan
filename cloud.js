@@ -1,4 +1,4 @@
-import {firebaseConfig} from './firebase-config.js?v=1.3.0';
+import {firebaseConfig} from './firebase-config.js?v=1.4.0';
 
 const FIREBASE_SDK='https://www.gstatic.com/firebasejs/11.10.0/';
 const LIMIT=150, IMAGE_LIMIT=850*1024;

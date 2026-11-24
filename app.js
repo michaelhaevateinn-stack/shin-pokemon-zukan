@@ -160,7 +160,7 @@
   });
   if(detail.open)detail.close();
  }
- window.addEventListener?.('hashchange',route);
+ window.addEventListener?.('hashchange',()=>{route();window.scrollTo(0,0);});
  function renderList(){
   for(const url of cardURLs)URL.revokeObjectURL(url);cardURLs=[];
   const list=$('entryList');list.replaceChildren();
