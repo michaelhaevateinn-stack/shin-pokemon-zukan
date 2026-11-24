@@ -9,28 +9,12 @@
   model:['〇〇モデル','動物・道具・食べ物など、好きなものをモデルにしたオリジナルのポケモンを考えたい。モチーフの特徴が見た目やタイプにどう出るか一緒に考えて。']
  };
  const MAX_IMAGE=2*1024*1024, MAX_UPLOAD=20*1024*1024, MAX_ENTRIES=150, MAX_BACKUP=45*1024*1024;
- let cloud=null, cloudSession=0, cloudState='unconfigured', cloudEmail=null, sharedRows=[], lookingAt='local', listRun=0, copyDraft=null, copying=false, pendingShared=null;
- let ready=null, records=[], preview=null, pendingImage=null, uploadSeq=0, cardURLs=[], saving=false, importing=false, imageWorking=false;
+ let cloud=null, cloudSession=0, cloudState='unconfigured', cloudEmail=null, sharedRows=[], listRun=0, pendingShared=null;
+ let preview=null, pendingImage=null, uploadSeq=0, cardURLs=[], saving=false, importing=false, imageWorking=false;
+ const active=session=>cloudState==='ready'&&session===cloudSession;
  const status=(id,msg)=>{if($(id))$(id).textContent=msg;};
  const report=(id,msg)=>status(id,msg);
  const make=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
- const open=()=>new Promise((resolve,reject)=>{
-  if(!window.indexedDB){reject(Error('IndexedDB unavailable'));return;}
-  const req=indexedDB.open('mihakken-pokemon-zukan',1);
-  req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('entries'))req.result.createObjectStore('entries',{keyPath:'id'});};
-  req.onerror=()=>reject(req.error);req.onblocked=()=>reject(Error('Database blocked'));
-  req.onsuccess=()=>resolve(req.result);
- });
- async function store(mode,work){
-  const db=await ready;
-  return new Promise((resolve,reject)=>{
-   const tx=db.transaction('entries',mode);
-   let value;
-   tx.oncomplete=()=>resolve(value?.result);
-   tx.onabort=tx.onerror=()=>reject(tx.error||Error('Save failed'));
-   try{value=work(tx.objectStore('entries'));}catch(error){tx.abort();reject(error);}
-  });
- }
  function readPrompt(){
   const form=$('promptForm'), course=form.querySelector('input[name="course"]:checked')?.value;
   if(!Object.hasOwn(COURSES,course))return '';
@@ -109,8 +93,8 @@
  function renderList(){
   for(const url of cardURLs)URL.revokeObjectURL(url);cardURLs=[];
   const list=$('entryList');list.replaceChildren();
-  const displayed=lookingAt==='shared'?sharedRows:records;
-  if(!displayed.length)list.append(make('p',lookingAt==='shared'?'共有の記録は まだありません。':'まだ とうろくされていないよ。'));
+  const displayed=sharedRows;
+  if(!displayed.length)list.append(make('p','共有の記録は まだありません。'));
   for(const entry of displayed){
    const article=make('article');article.className='entry-card';
    const img=make('img');img.loading='lazy';img.alt=entry.name;
@@ -121,23 +105,17 @@
    article.append(tags);list.append(article);
   }
   status('entryCount',displayed.length+'ひき');
-  if($('cloudCopy'))$('cloudCopy').disabled=cloudState!=='ready'||!records.length||copying;
-  if($('exportEntries'))$('exportEntries').disabled=!records.length;
- }
- async function refresh(){
-  records=(await store('readonly',s=>s.getAll())).sort((a,b)=>b.saved-a.saved);
-  renderList();
+  $('exportEntries').disabled=cloudState!=='ready'||!sharedRows.length;
  }
  $('entryForm').addEventListener('submit',async ev=>{
-  ev.preventDefault();if(saving||importing||copying)return;
+  ev.preventDefault();if(cloudState!=='ready'||saving||importing)return;
   if(imageWorking){report('entryStatus','画像の じゅんびが おわるまで まってね。');return;}
   const name=$('entryName').value.trim(),t1=$('entryType1').value;
   const types=[t1,$('entryType2').value,$('entryType3')?.value].filter(Boolean);
   if(!name||name.length>40||!t1||!validTypes(types)||!pendingImage){
    report('entryStatus','名前と 画像、タイプ（かぶらないように）を えらんでね。');return;
   }
-  if(lookingAt==='shared'){
-   if(cloudState!=='ready')return;
+  {
    const submitted=uploadSeq, session=cloudSession;
    const signature=JSON.stringify([submitted,name,types]);
    if(!pendingShared||pendingShared.signature!==signature){
@@ -155,50 +133,45 @@
     pendingShared=null;
     if(submitted===uploadSeq){ev.target.reset();uploadSeq++;pendingImage=null;setPreview(null);}
     report('entryStatus',name+'を家族の図鑑に登録したよ！');
-    if(lookingAt==='shared')await loadShared();
+    await loadShared();
    }catch{
-    report('entryStatus','家族の図鑑に登録できなかったよ。入力は残してあるので、もういちど試してね。');
+    if(active(session))report('entryStatus','家族の図鑑に登録できなかったよ。入力は残してあるので、もういちど試してね。');
    }finally{saving=false;}
    return;
   }
-  if(records.length>=MAX_ENTRIES){report('entryStatus','この図鑑の上限は150ひきだよ。');return;}
-  const blob=pendingImage, submitToken=uploadSeq; saving=true;
-  try{
-   await store('readwrite',s=>s.add({id:crypto.randomUUID?.()||('z'+Date.now()+Math.random()),name,types,image:blob,saved:Date.now()}));
-   if(submitToken===uploadSeq){ev.target.reset();uploadSeq++;pendingImage=null;setPreview(null);}
-   report('entryStatus',name+'を 図鑑に とうろくしたよ！');
-   try{await refresh();}catch{report('entryStatus','保存したよ。一覧が見えなければ 開き直してね。');}
-  }catch{report('entryStatus','保存できなかったよ。このブラウザの空き容量や設定を かくにんしてね。');}
-  finally{saving=false;}
  });
  const backupMessage=msg=>report($('backupStatus')?'backupStatus':'entryStatus',msg);
  function dataURL(blob){return new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(fr.result);fr.onerror=()=>reject(fr.error);fr.readAsDataURL(blob);});}
  $('exportEntries')?.addEventListener('click',async()=>{
-  if(!records.length)return;
-  const copied=[...records];
+  if(cloudState!=='ready')return;
+  const session=cloudSession;
   try{
+   const copied=await cloud.list();
+   if(!active(session)||!copied.length)return;
    const entries=[];let size=0;
    for(const item of copied){
     const {image,...rest}=item,encoded=await dataURL(image);size+=encoded.length;
     if(size>MAX_BACKUP)throw Error('ファイルが大きすぎて 書き出せなかったよ。');
     entries.push({...rest,image:encoded});
    }
+   if(!active(session))return;
    const url=URL.createObjectURL(new Blob([JSON.stringify({format:'mihakken-pokemon-zukan',version:1,entries})],{type:'application/json'}));
    const link=make('a');link.href=url;link.download='mihakken-pokemon-zukan.json';document.body.append(link);link.click();link.remove();
    setTimeout(()=>URL.revokeObjectURL(url),2000);backupMessage('図鑑の バックアップを 書き出したよ。');
-  }catch(error){backupMessage(error.message||'バックアップを 書き出せなかったよ。');}
+  }catch(error){if(active(session))backupMessage(error.message||'バックアップを 書き出せなかったよ。');}
  });
  $('importEntries')?.addEventListener('change',async ev=>{
   const file=ev.target.files?.[0];ev.target.value='';
-  if(!file||importing||saving)return;importing=true;
+  if(!file||cloudState!=='ready'||importing||saving)return;
+  const session=cloudSession; importing=true; let added=0,existing=0,writing=false;
   try{
    if(file.size>MAX_BACKUP)throw Error('バックアップ ファイルが 大きすぎるよ。');
    const raw=JSON.parse(await file.text());
    if(raw.format!=='mihakken-pokemon-zukan'||raw.version!==1||!Array.isArray(raw.entries)||raw.entries.length>MAX_ENTRIES)throw Error('この図鑑の バックアップを えらんでね。');
-   const ids=new Set(records.map(x=>x.id)), additions=[];
+   const ids=new Set(), additions=[];
    for(const row of raw.entries){
     const {id,name,types,image,saved}=row||{};
-    if(typeof id!=='string'||!/^[-a-z0-9.]{1,75}$/i.test(id)||typeof name!=='string'||!name.trim()||name.length>40||
+    if(typeof id!=='string'||id==='.'||id==='..'||!/^[-a-z0-9.]{1,75}$/i.test(id)||typeof name!=='string'||!name.trim()||name.length>40||
        !validTypes(types)||
        typeof image!=='string'||image.length>MAX_IMAGE*1.4||!/^data:image\/(?:png|webp|jpeg);base64,[a-z0-9+/=]+$/i.test(image)||
        !Number.isSafeInteger(saved)||saved<0)throw Error('こわれた 図鑑データがあるよ。何も 追加しなかったよ。');
@@ -208,40 +181,43 @@
     const blob=await imageBlob(new Blob([bytes],{type:mime}));
     additions.push({id,name:name.trim(),types,image:blob,saved});
    }
-   if(ids.size>MAX_ENTRIES)throw Error('150ひきの 上限を こえるよ。何も 追加しなかったよ。');
-   if(!additions.length){backupMessage('新しく 追加するデータは なかったよ。');return;}
-   await store('readwrite',s=>{for(const row of additions)s.add(row);});
-   try{await refresh();backupMessage(additions.length+'ひき 追加したよ。今までの 図鑑は そのままだよ。');}
-   catch{backupMessage('追加したよ。一覧が見えなければ 開き直してね。');}
-  }catch(error){backupMessage(error instanceof SyntaxError?'この図鑑の バックアップを えらんでね。':error.message||'読み込めなかったよ。');}
-  finally{importing=false;}
+   if(!active(session)||!additions.length)return;
+   writing=true;
+   for(const row of additions){
+    if(!active(session))return;
+    backupMessage('共有図鑑に読み込み中… '+(added+existing)+' / '+additions.length);
+    const result=await cloud.putIfMissing(row);
+    if(result==='added')added++;else if(result==='existing')existing++;else throw Error('Save failed');
+   }
+   if(active(session)){
+    await loadShared();
+    if(active(session))backupMessage(added+'ひき追加したよ。'+existing+'ひきは登録済みだよ。');
+   }
+  }catch(error){
+   if(active(session)){
+    if(writing){
+     await loadShared();
+     if(active(session))backupMessage(added+'ひき追加したところで止まったよ。同じファイルを読み込めば、残りを追加できるよ。');
+    }else backupMessage(error instanceof SyntaxError?'この図鑑の バックアップを えらんでね。':error.message||'読み込めなかったよ。');
+   }
+  }finally{importing=false;}
  });
- function closeCopy(){
-  copyDraft=null;
-  if($('cloudCopyConfirm'))$('cloudCopyConfirm').hidden=true;
- }
- function setView(view){
-  lookingAt=view;
-  status('entrySubmit',view==='shared'?'家族の図鑑に登録する':'この端末の図鑑に登録する');
-  $('localView')?.setAttribute('aria-pressed',String(view==='local'));
-  $('sharedView')?.setAttribute('aria-pressed',String(view==='shared'));
-  renderList();
- }
  const notices={
-  unconfigured:'共有はまだ設定されていません。この端末の図鑑は使えるよ。',
+  unconfigured:'共有はまだ設定されていません。',
   connecting:'共有図鑑に接続中…',
   signedOut:'家族の共有図鑑を見るには ログインしてね。',
-  unauthorized:'このアカウントは共有図鑑の許可がありません。この端末の図鑑は使えるよ。',
+  unauthorized:'このアカウントは共有図鑑の許可がありません。',
   ready:'家族の共有図鑑に接続したよ。',
-  error:'共有図鑑に接続できなかったよ。この端末の図鑑は使えるよ。'
+  error:'共有図鑑に接続できなかったよ。'
  };
  function cloudChanged(info){
   const state=info?.state||'unconfigured', email=info?.email||null;
   if(state!==cloudState||email!==cloudEmail){
-   cloudSession++;listRun++;closeCopy();sharedRows=[];
-   report('cloudActionStatus','');
-   setView('local');
+   cloudSession++;listRun++;sharedRows=[];
+   report('cloudActionStatus','');backupMessage('');report('entryStatus','');
+   $('entryForm').reset();uploadSeq++;pendingImage=null;pendingShared=null;imageWorking=false;setPreview(null);
   }
+  const changed=state!==cloudState||email!==cloudEmail;
   cloudState=state;cloudEmail=email;
   report('cloudStatus',notices[state]||notices.error);
   const diagnostic=$('cloudDiagnostics'), ownUid=$('cloudUid');
@@ -257,8 +233,11 @@
   }
   if($('cloudSignIn'))$('cloudSignIn').hidden=!['signedOut','error'].includes(state);
   if($('cloudSignOut'))$('cloudSignOut').hidden=!['ready','unauthorized','error'].includes(state);
-  if($('cloudViews'))$('cloudViews').hidden=state!=='ready';
-  if($('cloudCopy'))$('cloudCopy').disabled=state!=='ready'||!records.length||copying;
+  $('familyContent').hidden=state!=='ready';
+  $('familyNav').hidden=state!=='ready';
+  $('cloudRefresh').hidden=state!=='ready';
+  renderList();
+  if(state==='ready'&&changed)void loadShared();
  }
  function hookCloud(){
   if(cloud||!window.dexCloud?.subscribe)return;
@@ -273,7 +252,7 @@
    const rows=await cloud.list();
    if(token!==listRun||session!==cloudSession||cloudState!=='ready')return;
    sharedRows=rows.filter(row=>row&&typeof row.name==='string'&&row.name.length<=40&&validTypes(row.types)&&row.image instanceof Blob&&row.image.size<=MAX_IMAGE).sort((a,b)=>b.saved-a.saved);
-   setView('shared');
+   renderList();
    report('cloudActionStatus','共有図鑑を 表示中。');
   }catch{
    if(token===listRun&&session===cloudSession)report('cloudActionStatus','共有図鑑を 読み込めなかったよ。もういちど 試してね。');
@@ -287,42 +266,8 @@
   }
  });
  $('cloudSignOut')?.addEventListener('click',async()=>{try{await cloud?.signOut();}catch{report('cloudActionStatus','ログアウトできなかったよ。もういちど 試してね。');}});
- $('localView')?.addEventListener('click',()=>{listRun++;setView('local');if(!copying)report('cloudActionStatus','この端末の図鑑を 表示中。');});
- $('sharedView')?.addEventListener('click',loadShared);
- $('cloudCopy')?.addEventListener('click',()=>{
-  if(cloudState!=='ready'||copying||saving||!records.length)return;
-  copyDraft={session:cloudSession,rows:[...records]};
-  report('cloudCopyQuestion',copyDraft.rows.length+'ひきを家族の共有図鑑にコピーする？ 同じ記録は追加せず、この端末の図鑑はそのまま残るよ。');
-  $('cloudCopyConfirm').hidden=false;
- });
- $('cloudCopyNo')?.addEventListener('click',closeCopy);
- $('cloudCopyYes')?.addEventListener('click',async()=>{
-  const draft=copyDraft;
-  if(copying||saving||!draft||draft.session!==cloudSession||cloudState!=='ready')return;
-  closeCopy();copying=true;listRun++;$('cloudCopy').disabled=true;
-  let added=0, existing=0;
-  const current=()=>draft.session===cloudSession&&cloudState==='ready';
-  try{
-   for(const row of draft.rows){
-    if(!current())break;
-    report('cloudActionStatus','共有にコピー中… '+(added+existing)+' / '+draft.rows.length);
-    const result=await cloud.putIfMissing(row);
-    if(result==='added')added++;else if(result==='existing')existing++;else throw Error('Copy failed');
-   }
-   if(current()){
-    if(lookingAt==='shared'){await loadShared();}
-    if(current())report('cloudActionStatus',added+'ひき コピーしたよ。'+existing+'ひきは すでに共有にあるよ。この端末の図鑑はそのままだよ。');
-   }
-  }catch{
-   if(current())report('cloudActionStatus',added+'ひき コピーしたところで止まったよ。この端末の図鑑はそのまま。もういちどコピーすれば続きから追加できるよ。');
-  }finally{
-   copying=false;$('cloudCopy').disabled=cloudState!=='ready'||!records.length;
-  }
- });
+ $('cloudRefresh').addEventListener('click',loadShared);
  window.addEventListener?.('dexCloudReady',hookCloud);
  hookCloud();if(!cloud)cloudChanged({state:'unconfigured'});
- renderPrompt();ready=open();refresh().catch(()=>{
-  report('entryStatus','このブラウザでは 図鑑を保存できないよ。ブラウザの設定を かくにんしてね。');
-  if($('exportEntries'))$('exportEntries').disabled=true;
- });
+ renderPrompt();
 })();
