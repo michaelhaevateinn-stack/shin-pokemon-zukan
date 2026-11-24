@@ -1,4 +1,4 @@
-import {firebaseConfig} from './firebase-config.js';
+import {firebaseConfig} from './firebase-config.js?v=1.3.0';
 
 const FIREBASE_SDK='https://www.gstatic.com/firebasejs/11.10.0/';
 const LIMIT=150, IMAGE_LIMIT=850*1024;
@@ -23,12 +23,23 @@ function token(){
  };
  return check;
 }
+const PROFILE_MAX=Object.freeze({category:45,feature:300,ability:60});
+function checkedProfile(value){
+ if(value==null)return {};
+ if(typeof value!=='object'||Array.isArray(value))throw Error('Invalid profile');
+ const cleaned={};
+ for(const k of Object.keys(value)){
+  if(!Object.hasOwn(PROFILE_MAX,k)||typeof value[k]!=='string'||value[k].length>PROFILE_MAX[k])throw Error('Invalid profile');
+  cleaned[k]=value[k].trim();
+ }
+ return cleaned;
+}
 function checkedMeta(row){
  const {id,name,types,saved}=row??{};
  if(typeof id!=='string'||!ID.test(id)||id==='.'||id==='..'||typeof name!=='string'||!name.trim()||name.trim().length>40||
   !Array.isArray(types)||!types.length||types.length>3||new Set(types).size!==types.length||types.some(t=>!TYPES.has(t))||
   !Number.isSafeInteger(saved)||saved<0)throw Error('Invalid dex entry');
- return {id,name:name.trim(),types:[...types],saved};
+ return {id,name:name.trim(),types:[...types],saved,profile:checkedProfile(row.profile)};
 }
 async function decodeCloudImage(blob){
  if(typeof createImageBitmap==='function'){
@@ -105,6 +116,13 @@ const cloud={
   }
   }catch(error){check.fail(error)}
  },
+ async updateProfile(id,profile){
+  const check=token(),safe=checkedProfile(profile);
+  if(typeof id!=='string'||!ID.test(id)||id==='.'||id==='..')throw Error('Invalid ID');
+  const ref=sdkDb.doc(db,'familyDexEntries',id);
+  // Never edit other fields. An update of a missing document fails instead of creating it.
+  check();await sdkDb.updateDoc(ref,{profile:safe});check();
+ },
  async putIfMissing(row){
   const check=token(),meta=checkedMeta(row);
   try{
@@ -114,12 +132,18 @@ const cloud={
   const image=await cloudImage(row.image,check);check();
   const raw=await image.arrayBuffer();check();
   const payload={name:meta.name,types:meta.types,saved:meta.saved,mime:image.type,image:sdkDb.Bytes.fromUint8Array(new Uint8Array(raw))};
+  if(Object.keys(meta.profile).length)payload.profile=meta.profile;
   return await sdkDb.runTransaction(db,async tx=>{
    check();const present=await tx.get(ref);check();
    if(present.exists())return 'existing';
    tx.set(ref,payload);return 'added';
   });
-  }catch(error){check.fail(error)}
+   }catch(error){
+   // A server read may succeed while an older ruleset rejects the optional profile on creation.
+   // Keep the signed-in form draft; never silently save only part of the submitted data.
+   if(error?.code==='permission-denied'&&Object.keys(meta.profile).length){check();throw error;}
+   check.fail(error);
+  }
  }
 };
 window.dexCloud=Object.freeze(cloud);window.dispatchEvent(new Event('dexCloudReady'));

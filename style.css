@@ -8,3 +8,26 @@
 .family-share h3,.family-share p{margin:.18rem 0}.family-share [hidden]{display:none!important}
 .family-share .actions{margin-top:.25rem}.family-share [aria-pressed="true"]{box-shadow:0 0 0 2px #176055 inset}
 .cloud-confirm{padding:.65rem;border:1px solid var(--line);border-radius:.65rem;background:#eff8f4}
+
+/* Compact catalogue; large artwork lives in the detail dialog. */
+#entryList{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+#entryList>p{grid-column:1/-1}
+.dex-tile{display:flex;flex-direction:column;gap:7px;align-items:stretch;text-align:left;width:100%;min-width:0;padding:9px;border:1px solid #c4d9d3;border-radius:15px;background:#fff;color:#183843;cursor:pointer}
+.dex-tile:focus-visible,.top nav a:focus-visible{outline:3px solid #297461;outline-offset:2px}
+.dex-tile img{display:block;width:100%;height:auto;aspect-ratio:1;object-fit:contain;border-radius:10px;background:#eaf4ef}
+.dex-tile strong{font-size:.92rem;overflow-wrap:anywhere}
+.dex-tile .entry-types{gap:3px;margin:0}
+.dex-tile .entry-type{font-size:.68rem;padding:.12rem .32rem}
+.top nav a[aria-current=page]{background:#b9edd0;color:#123b39}
+#entryDetail{border:1px solid #8fb7ae;border-radius:20px;padding:16px;width:min(92vw,480px);max-height:86dvh;color:#183843;background:#fff}
+#entryDetail::backdrop{background:#102e38aa}
+#entryDetail .detail-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px}
+#detailName{margin:0;overflow-wrap:anywhere;font-size:1.3rem}
+#detailImage{display:block;width:100%;height:min(48vh,340px);object-fit:contain;background:#eaf4ef;border-radius:14px;margin-bottom:9px}
+#detailProfile dt{font-weight:700;margin-top:8px}
+#detailProfile dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+#profileEditor summary{cursor:pointer;font-weight:700}
+#profileForm textarea,#profileForm input{width:100%}
+@media(max-width:620px){#entryList{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.top nav a{padding-inline:.4rem}}
+.entry-profile-new summary{cursor:pointer;font-weight:700}
+.entry-profile-new input,.entry-profile-new textarea{width:100%}

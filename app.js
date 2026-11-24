@@ -90,19 +90,90 @@
   catch(error){if(token===uploadSeq)report('entryStatus',error.message);}
   finally{if(token===uploadSeq)imageWorking=false;}
  });
+ const fields={category:['ぶんるい','Category',45],feature:['とくちょう','Feature',300],ability:['とくせい','Ability',60]};
+ let detailId=null,detailURL=null,detailSource=null,profileSaving=false;
+ const detail=$('entryDetail');
+ function normalizeProfile(raw){
+  if(raw==null)return {};
+  if(typeof raw!=='object'||Array.isArray(raw))throw Error('ずかんの せつめいが よめなかったよ。');
+  const out={};
+  for(const [key,value] of Object.entries(raw)){
+   if(!Object.hasOwn(fields,key)||typeof value!=='string'||value.length>fields[key][2])throw Error('ぶんるい・とくちょう・とくせいを かくにんしてね。');
+   const trimmed=value.trim();if(trimmed)out[key]=trimmed;
+  }
+  return out;
+ }
+ function formProfile(prefix){
+  return normalizeProfile(Object.fromEntries(Object.entries(fields).map(([key,[,id]])=>[key,$(prefix+id).value])));
+ }
+ function typeTags(container,types){
+  container.replaceChildren();
+  for(const type of types){const tag=make('span',type);tag.className='entry-type';container.append(tag);}
+ }
+ function showProfile(row){
+  $('detailProfile').replaceChildren();
+  for(const [key,[label,id]] of Object.entries(fields)){
+   const v=row.profile?.[key]||''; if(v)$('detailProfile').append(make('dt',label),make('dd',v)); $('profile'+id).value=v;
+  }
+ }
+ function clearDetail(){
+  if(detailURL)URL.revokeObjectURL(detailURL);
+  detailURL=null;detailId=null;$('detailImage').removeAttribute('src');$('detailImage').alt='';
+  status('detailName','');$('detailTypes').replaceChildren();$('detailProfile').replaceChildren();$('profileForm').reset();
+  if(detailSource?.isConnected&&cloudState==='ready')detailSource.focus?.();detailSource=null;
+ }
+ detail.addEventListener('close',()=>{if(!detail.open)clearDetail();});
+ function showDetail(row,tile){
+  if(cloudState!=='ready'||detail.open)return;
+  detailId=row.id;detailSource=tile;detailURL=URL.createObjectURL(row.image);
+  $('detailImage').src=detailURL;$('detailImage').alt=row.name;status('detailName',row.name);
+  typeTags($('detailTypes'),row.types);showProfile(row);
+  $('profileEditor').open=false;report('profileStatus','');$('profileSave').disabled=profileSaving;
+  detail.showModal();
+ }
+ $('profileForm').addEventListener('submit',async ev=>{
+  ev.preventDefault(); if(profileSaving||cloudState!=='ready'||!detail.open||!detailId)return;
+  let profile;
+  try{profile=formProfile('profile');}catch(e){report('profileStatus',e.message);return;}
+  const id=detailId,session=cloudSession;
+  const stillOpen=()=>active(session)&&detail.open&&detailId===id;
+  profileSaving=true;$('profileSave').disabled=true;report('profileStatus','ほぞんしているよ…');
+  try{
+   await cloud.updateProfile(id,profile);
+   if(!active(session))return;
+   const row=sharedRows.find(item=>item.id===id);
+   if(row){row.profile=profile;if(stillOpen())showProfile(row);}
+   if(stillOpen())report('profileStatus','ほぞんしたよ。');
+  }catch(error){
+   if(stillOpen())report('profileStatus',error?.code==='permission-denied'?'ほぞんできなかったよ。Firebaseの ルールを かくにんしてね。':'ほぞんできなかったよ。もういちど ためしてね。');
+  }finally{profileSaving=false;$('profileSave').disabled=false;}
+ });
+ const views=new Set(['dex','discover','register']);
+ function route(){
+  const requested=window.location?.hash?.slice(1);
+  const current=views.has(requested)?requested:'dex';
+  for(const id of views)$(id).hidden=id!==current;
+  $('discoverHero').hidden=current!=='discover';
+  $('familyNav').querySelectorAll?.('a').forEach(a=>{
+   if(a.getAttribute('href')==='#'+current)a.setAttribute('aria-current','page');
+   else a.removeAttribute('aria-current');
+  });
+  if(detail.open)detail.close();
+ }
+ window.addEventListener?.('hashchange',route);
  function renderList(){
   for(const url of cardURLs)URL.revokeObjectURL(url);cardURLs=[];
   const list=$('entryList');list.replaceChildren();
   const displayed=sharedRows;
-  if(!displayed.length)list.append(make('p','共有の記録は まだありません。'));
+  if(!displayed.length)list.append(make('p','ずかんには まだ ポケモンが いないよ。'));
   for(const entry of displayed){
-   const article=make('article');article.className='entry-card';
-   const img=make('img');img.loading='lazy';img.alt=entry.name;
-   const url=URL.createObjectURL(entry.image);cardURLs.push(url);img.src=url;article.append(img);
-   article.append(make('h3',entry.name));
-   const tags=make('div');tags.className='entry-types';
-   for(const type of entry.types){const tag=make('span',type);tag.className='entry-type';tags.append(tag);}
-   article.append(tags);list.append(article);
+   const tile=make('button');tile.type='button';tile.className='dex-tile';
+   tile.setAttribute('aria-label',entry.name+'を くわしく みる');
+   const img=make('img');img.loading='lazy';img.alt='';
+   const url=URL.createObjectURL(entry.image);cardURLs.push(url);img.src=url;tile.append(img);
+   tile.append(make('strong',entry.name));
+   const tags=make('div');tags.className='entry-types';typeTags(tags,entry.types);tile.append(tags);
+   tile.addEventListener('click',()=>showDetail(entry,tile));list.append(tile);
   }
   status('entryCount',displayed.length+'ひき');
   $('exportEntries').disabled=cloudState!=='ready'||!sharedRows.length;
@@ -115,14 +186,16 @@
   if(!name||name.length>40||!t1||!validTypes(types)||!pendingImage){
    report('entryStatus','名前と 画像、タイプ（かぶらないように）を えらんでね。');return;
   }
+  let profile;
+  try{profile=formProfile('entry');}catch(e){report('entryStatus',e.message);return;}
   {
    const submitted=uploadSeq, session=cloudSession;
-   const signature=JSON.stringify([submitted,name,types]);
+   const signature=JSON.stringify([submitted,name,types,profile]);
    if(!pendingShared||pendingShared.signature!==signature){
-    pendingShared={signature,entry:{id:crypto.randomUUID?.()||('z'+Date.now()+Math.random()),name,types,image:pendingImage,saved:Date.now()}};
+    pendingShared={signature,entry:{id:crypto.randomUUID?.()||('z'+Date.now()+Math.random()),name,types,image:pendingImage,saved:Date.now(),profile}};
    }
    const draft=pendingShared; saving=true;
-   report('entryStatus','家族の図鑑に登録中…');
+   report('entryStatus','かぞくの ずかんに のせているよ…');
    try{
     const result=await cloud.putIfMissing(draft.entry);
     if(result!=='added'&&result!=='existing')throw Error('Save failed');
@@ -132,10 +205,10 @@
     }
     pendingShared=null;
     if(submitted===uploadSeq){ev.target.reset();uploadSeq++;pendingImage=null;setPreview(null);}
-    report('entryStatus',name+'を家族の図鑑に登録したよ！');
+    report('entryStatus',name+'を ずかんに のせたよ！');
     await loadShared();
-   }catch{
-    if(active(session))report('entryStatus','家族の図鑑に登録できなかったよ。入力は残してあるので、もういちど試してね。');
+   }catch(error){
+    if(active(session))report('entryStatus',error?.code==='permission-denied'&&Object.keys(profile).length?'せつめいを ほぞんできなかったよ。Firebaseの ルールを かくにんしてね。かいた ことばは のこしてあるよ。':'ずかんに のせられなかったよ。かいた ことばは のこしてあるよ。');
    }finally{saving=false;}
    return;
   }
@@ -157,7 +230,7 @@
    if(!active(session))return;
    const url=URL.createObjectURL(new Blob([JSON.stringify({format:'mihakken-pokemon-zukan',version:1,entries})],{type:'application/json'}));
    const link=make('a');link.href=url;link.download='mihakken-pokemon-zukan.json';document.body.append(link);link.click();link.remove();
-   setTimeout(()=>URL.revokeObjectURL(url),2000);backupMessage('図鑑の バックアップを 書き出したよ。');
+   setTimeout(()=>URL.revokeObjectURL(url),2000);backupMessage('ずかんの バックアップを つくったよ。');
   }catch(error){if(active(session))backupMessage(error.message||'バックアップを 書き出せなかったよ。');}
  });
  $('importEntries')?.addEventListener('change',async ev=>{
@@ -170,7 +243,7 @@
    if(raw.format!=='mihakken-pokemon-zukan'||raw.version!==1||!Array.isArray(raw.entries)||raw.entries.length>MAX_ENTRIES)throw Error('この図鑑の バックアップを えらんでね。');
    const ids=new Set(), additions=[];
    for(const row of raw.entries){
-    const {id,name,types,image,saved}=row||{};
+    const {id,name,types,image,saved,profile}=row||{};
     if(typeof id!=='string'||id==='.'||id==='..'||!/^[-a-z0-9.]{1,75}$/i.test(id)||typeof name!=='string'||!name.trim()||name.length>40||
        !validTypes(types)||
        typeof image!=='string'||image.length>MAX_IMAGE*1.4||!/^data:image\/(?:png|webp|jpeg);base64,[a-z0-9+/=]+$/i.test(image)||
@@ -179,7 +252,7 @@
     const [,mime,encoded]=image.match(/^data:([^;]+);base64,(.+)$/i);
     const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));
     const blob=await imageBlob(new Blob([bytes],{type:mime}));
-    additions.push({id,name:name.trim(),types,image:blob,saved});
+    additions.push({id,name:name.trim(),types,image:blob,saved,profile:normalizeProfile(profile)});
    }
    if(!active(session)||!additions.length)return;
    writing=true;
@@ -204,16 +277,16 @@
  });
  const notices={
   unconfigured:'共有はまだ設定されていません。',
-  connecting:'共有図鑑に接続中…',
-  signedOut:'家族の共有図鑑を見るには ログインしてね。',
+  connecting:'ずかんに つないでいるよ…',
+  signedOut:'かぞくの ずかんを みるには ログインしてね。',
   unauthorized:'このアカウントは共有図鑑の許可がありません。',
-  ready:'家族の共有図鑑に接続したよ。',
-  error:'共有図鑑に接続できなかったよ。'
+  ready:'かぞくの ずかんに つながったよ。',
+  error:'ずかんに つながらなかったよ。'
  };
  function cloudChanged(info){
   const state=info?.state||'unconfigured', email=info?.email||null;
   if(state!==cloudState||email!==cloudEmail){
-   cloudSession++;listRun++;sharedRows=[];
+   cloudSession++;listRun++;sharedRows=[];if(detail.open)detail.close();clearDetail();
    report('cloudActionStatus','');backupMessage('');report('entryStatus','');
    $('entryForm').reset();uploadSeq++;pendingImage=null;pendingShared=null;imageWorking=false;setPreview(null);
   }
@@ -247,15 +320,15 @@
  async function loadShared(){
   if(cloudState!=='ready')return;
   const token=++listRun, session=cloudSession;
-  report('cloudActionStatus','共有図鑑を 読み込んでいるよ…');
+  report('cloudActionStatus','ずかんを よみこんでいるよ…');
   try{
    const rows=await cloud.list();
    if(token!==listRun||session!==cloudSession||cloudState!=='ready')return;
    sharedRows=rows.filter(row=>row&&typeof row.name==='string'&&row.name.length<=40&&validTypes(row.types)&&row.image instanceof Blob&&row.image.size<=MAX_IMAGE).sort((a,b)=>b.saved-a.saved);
    renderList();
-   report('cloudActionStatus','共有図鑑を 表示中。');
+   report('cloudActionStatus','ずかんを ひらいたよ。');
   }catch{
-   if(token===listRun&&session===cloudSession)report('cloudActionStatus','共有図鑑を 読み込めなかったよ。もういちど 試してね。');
+   if(token===listRun&&session===cloudSession)report('cloudActionStatus','ずかんを よめなかったよ。もういちど ためしてね。');
   }
  }
  $('cloudSignIn')?.addEventListener('click',async()=>{
@@ -269,5 +342,5 @@
  $('cloudRefresh').addEventListener('click',loadShared);
  window.addEventListener?.('dexCloudReady',hookCloud);
  hookCloud();if(!cloud)cloudChanged({state:'unconfigured'});
- renderPrompt();
+ renderPrompt();route();
 })();
