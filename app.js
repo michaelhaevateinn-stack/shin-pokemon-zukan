@@ -10,6 +10,7 @@
  };
  const MAX_IMAGE=2*1024*1024, MAX_UPLOAD=20*1024*1024, MAX_ENTRIES=150, MAX_BACKUP=45*1024*1024;
  let cloud=null, cloudSession=0, cloudState='unconfigured', cloudEmail=null, sharedRows=[], listRun=0, pendingShared=null;
+ let numbersReady=false,numberSaving=false;
  let preview=null, pendingImage=null, uploadSeq=0, cardURLs=[], saving=false, importing=false, imageWorking=false;
  const active=session=>cloudState==='ready'&&session===cloudSession;
  const status=(id,msg)=>{if($(id))$(id).textContent=msg;};
@@ -110,6 +111,29 @@
   container.replaceChildren();
   for(const type of types){const tag=make('span',type);tag.className='entry-type';container.append(tag);}
  }
+ const numberLabel=n=>'No.'+String(n).padStart(3,'0');
+ function positionOptions(el,max,value,forInsert=false){
+  const options=[];
+  for(let n=1;n<=max;n++){
+   const occupant=sharedRows[n-1];
+   const option=make('option',numberLabel(n)+(forInsert?(occupant?'（'+occupant.name+'の まえ）':'（さいご）'):''));
+   option.value=String(n);options.push(option);
+  }
+  el.replaceChildren(...options);el.value=String(value);
+ }
+ function syncNumbers(){
+  const entry=$('entryNumber');
+  const selected=Number(entry.value),wasLast=entry.value===entry.dataset.last, max=sharedRows.length+1;
+  positionOptions(entry,max,selected&&!wasLast?Math.min(selected,max):max,true);entry.dataset.last=String(max);
+  entry.disabled=!numbersReady;$('entrySubmit').disabled=!numbersReady;
+  if(detail.open&&detailId){
+   const position=sharedRows.findIndex(row=>row.id===detailId)+1;
+   if(position){
+    status('detailNumber',numberLabel(position));
+    if(!numberSaving)positionOptions($('detailPosition'),sharedRows.length,position);
+   }
+  }
+ }
  function showProfile(row){
   $('detailProfile').replaceChildren();
   for(const [key,[label,id]] of Object.entries(fields)){
@@ -119,7 +143,7 @@
  function clearDetail(){
   if(detailURL)URL.revokeObjectURL(detailURL);
   detailURL=null;detailId=null;$('detailImage').removeAttribute('src');$('detailImage').alt='';
-  status('detailName','');$('detailTypes').replaceChildren();$('detailProfile').replaceChildren();$('profileForm').reset();
+  status('detailName','');status('detailNumber','');$('detailTypes').replaceChildren();$('detailProfile').replaceChildren();$('profileForm').reset();
   if(detailSource?.isConnected&&cloudState==='ready')detailSource.focus?.();detailSource=null;
  }
  detail.addEventListener('close',()=>{if(!detail.open)clearDetail();});
@@ -129,7 +153,8 @@
   $('detailImage').src=detailURL;$('detailImage').alt=row.name;status('detailName',row.name);
   typeTags($('detailTypes'),row.types);showProfile(row);
   $('profileEditor').open=false;report('profileStatus','');$('profileSave').disabled=profileSaving;
-  detail.showModal();
+  $('numberEditor').open=false;report('numberStatus','');$('numberSave').disabled=numberSaving;
+  detail.showModal();syncNumbers();
  }
  $('profileForm').addEventListener('submit',async ev=>{
   ev.preventDefault(); if(profileSaving||cloudState!=='ready'||!detail.open||!detailId)return;
@@ -147,6 +172,20 @@
   }catch(error){
    if(stillOpen())report('profileStatus',error?.code==='permission-denied'?'ほぞんできなかったよ。Firebaseの ルールを かくにんしてね。':'ほぞんできなかったよ。もういちど ためしてね。');
   }finally{profileSaving=false;$('profileSave').disabled=false;}
+ });
+ $('numberForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();if(!numbersReady||numberSaving||!detail.open||!detailId||saving||importing)return;
+  const id=detailId,session=cloudSession, position=Number($('detailPosition').value);
+  if(!Number.isInteger(position)||position<1||position>sharedRows.length)return;
+  numberSaving=true;$('numberSave').disabled=true;report('numberStatus','ばんごうを かえているよ…');
+  try{
+   await cloud.moveTo(id,position);
+   if(!active(session))return;
+   await loadShared();
+   if(active(session)&&detail.open&&detailId===id)report('numberStatus',numbersReady?'ばんごうを かえたよ。':'ほぞんしたよ。ずかんを よみなおしてね。');
+  }catch{
+   if(active(session)&&detail.open&&detailId===id)report('numberStatus','ばんごうを かえられなかったよ。もういちど ためしてね。');
+  }finally{numberSaving=false;$('numberSave').disabled=false;syncNumbers();}
  });
  const views=new Set(['dex','discover','register']);
  function route(){
@@ -166,20 +205,21 @@
   const list=$('entryList');list.replaceChildren();
   const displayed=sharedRows;
   if(!displayed.length)list.append(make('p','ずかんには まだ ポケモンが いないよ。'));
-  for(const entry of displayed){
+  for(const [index,entry] of displayed.entries()){
    const tile=make('button');tile.type='button';tile.className='dex-tile';
    tile.setAttribute('aria-label',entry.name+'を くわしく みる');
    const img=make('img');img.loading='lazy';img.alt='';
    const url=URL.createObjectURL(entry.image);cardURLs.push(url);img.src=url;tile.append(img);
    tile.append(make('strong',entry.name));
+   const number=make('span',numberLabel(index+1));number.className='dex-number';tile.prepend(number);
    const tags=make('div');tags.className='entry-types';typeTags(tags,entry.types);tile.append(tags);
    tile.addEventListener('click',()=>showDetail(entry,tile));list.append(tile);
   }
-  status('entryCount',displayed.length+'ひき');
+  status('entryCount',displayed.length+'ひき');syncNumbers();
   $('exportEntries').disabled=cloudState!=='ready'||!sharedRows.length;
  }
  $('entryForm').addEventListener('submit',async ev=>{
-  ev.preventDefault();if(cloudState!=='ready'||saving||importing)return;
+  ev.preventDefault();if(cloudState!=='ready'||!numbersReady||saving||importing||numberSaving)return;
   if(imageWorking){report('entryStatus','画像の じゅんびが おわるまで まってね。');return;}
   const name=$('entryName').value.trim(),t1=$('entryType1').value;
   const types=[t1,$('entryType2').value,$('entryType3')?.value].filter(Boolean);
@@ -190,21 +230,23 @@
   try{profile=formProfile('entry');}catch(e){report('entryStatus',e.message);return;}
   {
    const submitted=uploadSeq, session=cloudSession;
-   const signature=JSON.stringify([submitted,name,types,profile]);
+   const position=Number($('entryNumber').value);
+   if(!Number.isInteger(position)||position<1||position>sharedRows.length+1)return;
+   const signature=JSON.stringify([submitted,name,types,profile,position]);
    if(!pendingShared||pendingShared.signature!==signature){
     pendingShared={signature,entry:{id:crypto.randomUUID?.()||('z'+Date.now()+Math.random()),name,types,image:pendingImage,saved:Date.now(),profile}};
    }
    const draft=pendingShared; saving=true;
    report('entryStatus','かぞくの ずかんに のせているよ…');
    try{
-    const result=await cloud.putIfMissing(draft.entry);
+    const result=await cloud.putIfMissing(draft.entry,position);
     if(result!=='added'&&result!=='existing')throw Error('Save failed');
     if(session!==cloudSession||cloudState!=='ready'){
      report('entryStatus','ログインが変わったため確認できなかったよ。入力は残してあるよ。');
      return;
     }
     pendingShared=null;
-    if(submitted===uploadSeq){ev.target.reset();uploadSeq++;pendingImage=null;setPreview(null);}
+    if(submitted===uploadSeq){ev.target.reset();$('entryNumber').value=String(sharedRows.length+1);uploadSeq++;pendingImage=null;setPreview(null);}
     report('entryStatus',name+'を ずかんに のせたよ！');
     await loadShared();
    }catch(error){
@@ -235,7 +277,7 @@
  });
  $('importEntries')?.addEventListener('change',async ev=>{
   const file=ev.target.files?.[0];ev.target.value='';
-  if(!file||cloudState!=='ready'||importing||saving)return;
+  if(!file||cloudState!=='ready'||!numbersReady||importing||saving||numberSaving)return;
   const session=cloudSession; importing=true; let added=0,existing=0,writing=false;
   try{
    if(file.size>MAX_BACKUP)throw Error('バックアップ ファイルが 大きすぎるよ。');
@@ -286,7 +328,7 @@
  function cloudChanged(info){
   const state=info?.state||'unconfigured', email=info?.email||null;
   if(state!==cloudState||email!==cloudEmail){
-   cloudSession++;listRun++;sharedRows=[];if(detail.open)detail.close();clearDetail();
+   cloudSession++;listRun++;sharedRows=[];numbersReady=false;if(detail.open)detail.close();clearDetail();
    report('cloudActionStatus','');backupMessage('');report('entryStatus','');
    $('entryForm').reset();uploadSeq++;pendingImage=null;pendingShared=null;imageWorking=false;setPreview(null);
   }
@@ -324,11 +366,12 @@
   try{
    const rows=await cloud.list();
    if(token!==listRun||session!==cloudSession||cloudState!=='ready')return;
-   sharedRows=rows.filter(row=>row&&typeof row.name==='string'&&row.name.length<=40&&validTypes(row.types)&&row.image instanceof Blob&&row.image.size<=MAX_IMAGE).sort((a,b)=>b.saved-a.saved);
+   sharedRows=rows.filter(row=>row&&typeof row.name==='string'&&row.name.length<=40&&validTypes(row.types)&&row.image instanceof Blob&&row.image.size<=MAX_IMAGE);
+   numbersReady=true;
    renderList();
    report('cloudActionStatus','ずかんを ひらいたよ。');
   }catch{
-   if(token===listRun&&session===cloudSession)report('cloudActionStatus','ずかんを よめなかったよ。もういちど ためしてね。');
+   if(token===listRun&&session===cloudSession){numbersReady=false;syncNumbers();report('cloudActionStatus','ずかんを よめなかったよ。もういちど ためしてね。');}
   }
  }
  $('cloudSignIn')?.addEventListener('click',async()=>{

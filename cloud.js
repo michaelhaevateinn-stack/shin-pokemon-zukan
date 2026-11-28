@@ -1,4 +1,4 @@
-import {firebaseConfig} from './firebase-config.js?v=1.4.0';
+import {firebaseConfig} from './firebase-config.js?v=1.5.0';
 
 const FIREBASE_SDK='https://www.gstatic.com/firebasejs/11.10.0/';
 const LIMIT=150, IMAGE_LIMIT=850*1024;
@@ -86,6 +86,39 @@ async function observe(user){
   announce(error?.code==='permission-denied'?'unauthorized':'error',null,error?.code==='permission-denied'?'rules-denied':null);
  }
 }
+const ORDER_LIMIT=2000;
+const orderRef=()=>sdkDb.doc(db,'familyDexSettings','order');
+function mergeOrder(snapshot,rows){
+ const ids=snapshot.exists()?snapshot.data().ids:[];
+ if(!Array.isArray(ids)||ids.length>ORDER_LIMIT||ids.some(id=>typeof id!=='string'||!ID.test(id)||id==='.'||id==='..')||new Set(ids).size!==ids.length)throw Error('Invalid dex order');
+ // Unnumbered legacy documents follow in their existing newest-first order.
+ // Keep IDs unseen in this query: a concurrent transaction may already have inserted them.
+ const seen=new Set(ids);
+ return [...ids,...rows.map(row=>row.id).filter(id=>!seen.has(id))];
+}
+function writeOrder(tx,ref,ids){
+ if(ids.length>ORDER_LIMIT)throw Error('Dex order full');
+ tx.set(ref,{ids});
+}
+async function listEntries(check,withImages=true){
+  const entryCollection=sdkDb.collection(db,'familyDexEntries');
+  const rows=[];let last;
+  for(;;){
+   const q=sdkDb.query(entryCollection,sdkDb.orderBy('saved','desc'),...(last?[sdkDb.startAfter(last)]:[]),sdkDb.limit(LIMIT));
+   const snap=await sdkDb.getDocsFromServer(q);check();
+   for(const d of snap.docs){
+    try{
+     const data=d.data(),meta=checkedMeta({...data,id:d.id});
+     if(!MIME.has(data.mime)||!(data.image instanceof sdkDb.Bytes))continue;
+     if(!withImages){rows.push(meta);continue;}
+     const bytes=data.image.toUint8Array();
+     if(bytes.length&&bytes.length<=IMAGE_LIMIT)rows.push({...meta,image:new Blob([bytes],{type:data.mime})});
+    }catch{}
+   }
+   if(snap.docs.length<LIMIT)return rows;
+   last=snap.docs.at(-1);
+  }
+}
 const cloud={
  diagnosticsUid(){return current.state==='unauthorized' ? auth?.currentUser?.uid??'' : ''},
  subscribe(fn){observers.add(fn);fn(current);return ()=>observers.delete(fn)},
@@ -98,23 +131,26 @@ const cloud={
  async list(){
   const check=token();
   try{
-  const entryCollection=sdkDb.collection(db,'familyDexEntries');
-  const rows=[];let last;
-  for(;;){
-   const q=sdkDb.query(entryCollection,sdkDb.orderBy('saved','desc'),...(last?[sdkDb.startAfter(last)]:[]),sdkDb.limit(LIMIT));
-   const snap=await sdkDb.getDocsFromServer(q);check();
-   for(const d of snap.docs){
-    try{
-     const data=d.data(),meta=checkedMeta({...data,id:d.id});
-     if(!MIME.has(data.mime)||!(data.image instanceof sdkDb.Bytes))continue;
-     const bytes=data.image.toUint8Array();
-     if(bytes.length&&bytes.length<=IMAGE_LIMIT)rows.push({...meta,image:new Blob([bytes],{type:data.mime})});
-    }catch{}
-   }
-   if(snap.docs.length<LIMIT)return rows;
-   last=snap.docs.at(-1);
-  }
+   const rows=await listEntries(check);
+   const snap=await sdkDb.getDocFromServer(orderRef());check();
+   const ids=mergeOrder(snap,rows);
+   const byId=new Map(rows.map(row=>[row.id,row]));
+   return ids.flatMap(id=>byId.has(id)?[byId.get(id)]:[]);
   }catch(error){check.fail(error)}
+ },
+ async moveTo(id,position){
+  const check=token();
+  if(typeof id!=='string'||!ID.test(id)||id==='.'||id==='..'||!Number.isInteger(position)||position<1)throw Error('Invalid move');
+  const rows=await listEntries(check,false), ref=orderRef();
+  return sdkDb.runTransaction(db,async tx=>{
+   check();const snap=await tx.get(ref);check();
+   const ids=mergeOrder(snap,rows), old=ids.indexOf(id);
+   if(old<0)throw Error('Entry missing');
+   const next=Math.min(position,ids.length);
+   if(old===next-1)return;
+   ids.splice(old,1);ids.splice(next-1,0,id);
+   writeOrder(tx,ref,ids);
+  });
  },
  async updateProfile(id,profile){
   const check=token(),safe=checkedProfile(profile);
@@ -123,19 +159,25 @@ const cloud={
   // Never edit other fields. An update of a missing document fails instead of creating it.
   check();await sdkDb.updateDoc(ref,{profile:safe});check();
  },
- async putIfMissing(row){
+ async putIfMissing(row,position=null){
   const check=token(),meta=checkedMeta(row);
   try{
   const ref=sdkDb.doc(db,'familyDexEntries',meta.id);
   const original=await sdkDb.getDocFromServer(ref);check();
   if(original.exists())return 'existing';
+  if(position!==null&&(!Number.isInteger(position)||position<1))throw Error('Invalid position');
   const image=await cloudImage(row.image,check);check();
   const raw=await image.arrayBuffer();check();
   const payload={name:meta.name,types:meta.types,saved:meta.saved,mime:image.type,image:sdkDb.Bytes.fromUint8Array(new Uint8Array(raw))};
   if(Object.keys(meta.profile).length)payload.profile=meta.profile;
+  const rows=await listEntries(check,false), order=orderRef();
   return await sdkDb.runTransaction(db,async tx=>{
    check();const present=await tx.get(ref);check();
    if(present.exists())return 'existing';
+   const snap=await tx.get(order);check();
+   const ids=mergeOrder(snap,rows).filter(id=>id!==meta.id);
+   ids.splice(position===null?ids.length:Math.min(position-1,ids.length),0,meta.id);
+   writeOrder(tx,order,ids);
    tx.set(ref,payload);return 'added';
   });
    }catch(error){

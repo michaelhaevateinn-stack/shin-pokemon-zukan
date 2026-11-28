@@ -55,3 +55,5 @@ body { --bottom-nav-height: 4.5rem; }
 @media(hover:hover) {
  .bottom-nav a:not([aria-current]):hover {background:#edf7f3;color:var(--ink);}
 }
+
+.dex-number{display:block;font-size:.82rem;font-weight:750;letter-spacing:.035em;color:var(--green);font-variant-numeric:tabular-nums}.dex-tile .dex-number{margin:0 0 .18rem}#numberEditor{margin-top:1rem}#entryNumberHint{margin:.25rem 0 .65rem}

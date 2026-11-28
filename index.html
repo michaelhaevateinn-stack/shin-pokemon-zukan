@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#183843"><title>みはっけんポケモン図鑑</title><meta name="description" content="ゲボラと見つけた新種を、自分だけの図鑑へ。"><link rel="stylesheet" href="style.css?v=1.3.0"><script defer src="app.js?v=1.3.0"></script><script type="module" src="./cloud.js?v=1.3.0"></script></head>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#183843"><title>みはっけんポケモン図鑑</title><meta name="description" content="ゲボラと見つけた新種を、自分だけの図鑑へ。"><link rel="stylesheet" href="style.css?v=1.5.0"><script defer src="app.js?v=1.5.0"></script><script type="module" src="./cloud.js?v=1.5.0"></script></head>
 <body>
-<header class="top"><div class="wrap top-line"><a href="#top" class="brand">✦ みはっけんけんきゅうじょ <small>v1.4.0</small></a></div></header>
+<header class="top"><div class="wrap top-line"><a href="#top" class="brand">✦ みはっけんけんきゅうじょ <small>v1.5.0</small></a></div></header>
 <main id="top"><div class="wrap body-wrap"><section class="family-share" aria-labelledby="familyShareTitle">
-<h3 id="familyShareTitle">かぞくの ずかん <small>v1.4.0</small></h3>
+<h3 id="familyShareTitle">かぞくの ずかん <small>v1.5.0</small></h3>
 <p class="hint">Googleでログインしてね。かぞくだけが、おなじ ずかんに きろくできるよ。</p>
 <p id="cloudStatus" class="status" role="status">ログインを かくにんしているよ…</p>
 <div class="actions"><button class="button secondary" type="button" id="cloudSignIn" hidden>Googleでログイン</button><button class="button secondary" type="button" id="cloudSignOut" hidden>ログアウト</button><button class="button secondary" type="button" id="cloudRefresh" hidden>ずかんを よみなおす</button></div>
@@ -25,7 +25,7 @@
 <section id="register" hidden class="section" aria-labelledby="register-title"><p class="eyebrow">きろくする</p><h2 id="register-title">ずかんに のせる</h2><p>ポケモンの えを えらんで、なまえと タイプを きめよう。</p>
 <form id="entryForm" class="entry-box"><label for="entryImage">ポケモンの え</label><input id="entryImage" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/heic,image/heif" required><img id="entryPreview" alt="えらんだ ポケモンの え" hidden>
 <label for="entryName">なまえ</label><input id="entryName" type="text" maxlength="32" required placeholder="じぶんで なまえを つけよう">
-<div class="types"><div><label for="entryType1">タイプ1</label><select id="entryType1" required></select></div><div><label for="entryType2">タイプ2（なくてもOK）</label><select id="entryType2"></select></div><div><label for="entryType3">タイプ3（なくてもOK）</label><select id="entryType3"></select></div></div>
+<label for="entryNumber">ずかんばんごう</label><select id="entryNumber" aria-describedby="entryNumberHint" disabled></select><p class="hint" id="entryNumberHint">とちゅうに いれると、そのばんごうから ひとつずつ うしろに ずれるよ。</p><div class="types"><div><label for="entryType1">タイプ1</label><select id="entryType1" required></select></div><div><label for="entryType2">タイプ2（なくてもOK）</label><select id="entryType2"></select></div><div><label for="entryType3">タイプ3（なくてもOK）</label><select id="entryType3"></select></div></div>
 <details class="entry-profile-new"><summary>ぶんるい・とくちょう・とくせい（あとでも かけるよ）</summary>
 <label for="entryCategory">ぶんるい（〇〇ポケモン）</label><input id="entryCategory" maxlength="45">
 <label for="entryFeature">とくちょう</label><textarea id="entryFeature" maxlength="300" rows="3" placeholder="みためや せいかく、メモなど じゆうに"></textarea>
@@ -36,9 +36,13 @@
 </div></div></main>
 <nav id="familyNav" class="bottom-nav" hidden aria-label="ページの あんない"><div class="bottom-nav-inner"><a href="#dex"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6c-2.5-2-5.5-2.5-9-1v13c3.5-1.5 6.5-1 9 1 2.5-2 5.5-2.5 9-1V5c-3.5-1.5-6.5-1-9 1Zm0 0v13"/><path d="M6 8.5c1.1-.1 2 .1 3 .5m6 0c1-.4 1.9-.6 3-.5"/></svg><span>ずかん</span></a><a href="#discover"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7L12 3ZM5 15v5m-2.5-2.5h5M19 15v6m-3-3h6"/></svg><span>つくる</span></a><a href="#register"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8m-4-4h8"/></svg><span>きろく</span></a></div></nav>
 <footer class="wrap">みはっけんけんきゅうじょ · ファンが つくった ずかん（ひこうしき）</footer><dialog id="entryDetail" aria-labelledby="detailName">
- <div class="detail-top"><h2 id="detailName"></h2><form method="dialog"><button class="button secondary" type="submit">とじる</button></form></div>
+ <div class="detail-top"><div><span class="dex-number" id="detailNumber"></span><h2 id="detailName"></h2></div><form method="dialog"><button class="button secondary" type="submit">とじる</button></form></div>
  <img id="detailImage" alt=""><div id="detailTypes" class="entry-types"></div>
  <dl id="detailProfile"></dl>
+ <details id="numberEditor"><summary>ずかんばんごうを かえる</summary><form id="numberForm" class="entry-box">
+ <label for="detailPosition">あたらしい ばんごう</label><select id="detailPosition" required></select>
+ <button id="numberSave" class="button primary" type="submit">ばんごうを かえる</button><p id="numberStatus" class="status" role="status"></p>
+ </form></details>
  <details id="profileEditor"><summary>ぶんるい・とくちょう・とくせいを かく</summary><form id="profileForm" class="entry-box">
  <label for="profileCategory">ぶんるい（〇〇ポケモン）</label><input id="profileCategory" maxlength="45" placeholder="たとえば：さんしょくポケモン">
  <label for="profileFeature">とくちょう</label><textarea id="profileFeature" maxlength="300" rows="3" placeholder="みためや せいかく、メモなど じゆうに"></textarea>
